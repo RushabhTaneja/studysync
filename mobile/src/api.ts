@@ -20,26 +20,44 @@ export interface User {
 
 async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const token = await tokenStore.get();
+  // Only send a JSON Content-Type when there's actually a body. Sending it on a
+  // bodyless GET can trip up some proxies/CDNs into returning a non-JSON response.
+  const hasBody = opts.body != null;
   const res = await fetch(`${API_BASE_URL}/api${path}`, {
     ...opts,
     headers: {
-      "Content-Type": "application/json",
+      Accept: "application/json",
+      ...(hasBody ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(opts.headers ?? {}),
     },
   });
+
+  if (res.status === 204) return undefined as T;
+
+  // Read the raw text once, then parse — so a non-JSON body yields a useful
+  // error (with status + a snippet) instead of an opaque "Unexpected token".
+  const text = await res.text();
+
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
     try {
-      const body = await res.json();
-      msg = typeof body.error === "string" ? body.error : JSON.stringify(body.error);
+      const body = JSON.parse(text);
+      if (body?.error) msg = typeof body.error === "string" ? body.error : JSON.stringify(body.error);
     } catch {
-      /* ignore */
+      if (text.trim()) msg = `Request failed (${res.status}): ${text.slice(0, 200)}`;
     }
     throw new Error(msg);
   }
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+
+  if (!text.trim()) return undefined as T;
+  try {
+    return JSON.parse(text) as T;
+  } catch (e) {
+    const ct = res.headers.get("content-type") ?? "unknown";
+    console.warn(`[api] ${path} non-JSON response (content-type=${ct}):`, text.slice(0, 300));
+    throw new Error(`Server returned a non-JSON response for ${path} (content-type: ${ct}).`);
+  }
 }
 
 export const api = {
