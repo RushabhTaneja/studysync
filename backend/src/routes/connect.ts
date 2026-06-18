@@ -142,10 +142,8 @@ connectRouter.get("/dexcom/callback", async (req, res) => {
     if (!st) throw new Error("Invalid or expired OAuth state");
 
     const token = await dexcom.exchangeCode(code);
-    const ingest = await dexcom.ingestGlucose({
-      participantAccountId: st.participant_account_id,
-      accessToken: token.access_token,
-    });
+    // Mark connected and redirect immediately; the EGV backfill can be large, so pull it in
+    // the background rather than holding the post-consent redirect open.
     await upsertConnection({
       participantAccountId: st.participant_account_id,
       provider: "dexcom",
@@ -153,12 +151,24 @@ connectRouter.get("/dexcom/callback", async (req, res) => {
       refreshToken: token.refresh_token,
       expiresIn: token.expires_in,
       scope: "offline_access",
-      lastDataAt: ingest.lastDataAt,
     });
     res.redirect(redirectToFrontend("connected", "dexcom"));
+
+    dexcom
+      .ingestGlucose({ participantAccountId: st.participant_account_id, accessToken: token.access_token })
+      .then(async (ingest) => {
+        await query(
+          `UPDATE oauth_connections SET last_sync_at=now(),
+             last_data_at=COALESCE($3, last_data_at)
+           WHERE participant_account_id=$1 AND provider=$2`,
+          [st.participant_account_id, "dexcom", ingest.lastDataAt]
+        );
+        console.log(`[dexcom/callback] ingested ${ingest.ingested} EGVs for ${st.participant_account_id}`);
+      })
+      .catch((e) => console.error("[dexcom/ingest]", e.message));
   } catch (err: any) {
     console.error("[dexcom/callback]", err.message);
-    res.redirect(redirectToFrontend("error", "dexcom"));
+    res.redirect(redirectToFrontend("error", "dexcom", err.message));
   }
 });
 
