@@ -11,10 +11,11 @@ connect two real health-data sources over OAuth 2.0 — **Dexcom CGM** (glucose 
 their **EHR via SMART-on-FHIR** (clinical record) — and researchers monitor the cohort, view
 device-wear adherence, export data, and ask natural-language questions over both sources.
 
-> **Decided loudly (MVP scope):** The challenge specifies an *Android* participant client. For
-> this MVP we build a **web participant app** instead (same flows: sign-in, consent, connect/
-> disconnect sources, see own data), to get a genuine end-to-end slice working by the deadline.
-> The two OAuth integrations, RBAC account system, and TimescaleDB are kept real per the brief.
+> **Clients:** A **React Native (Expo) Android app** for participants lives in `mobile/` (sign-in,
+> consent, connect/disconnect Dexcom + EHR over OAuth, view own data). The original **web
+> participant app** remains in `frontend/` alongside the researcher dashboard. Researchers use the
+> web dashboard; the Android app is participant-only. (The web participant app shipped first as the
+> MVP slice; the React Native app was added on the `react-native-app` branch.)
 
 ## Architecture
 
@@ -35,6 +36,7 @@ See `docs/` for the architecture and ER diagrams and the design writeup.
 
 - `backend/` — Node + Express + TypeScript API, TimescaleDB schema/migrations, OAuth integrations.
 - `frontend/` — React + Vite + TypeScript web app (participant + researcher).
+- `mobile/` — React Native (Expo) **Android app** for participants (see `mobile/README.md`).
 - `docs/` — design writeup and diagrams.
 
 ## Run locally
