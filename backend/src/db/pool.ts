@@ -7,12 +7,15 @@ if (!config.databaseUrl) {
   );
 }
 
-// Timescale Cloud requires SSL. We accept its managed cert (sslmode=require in the URL),
-// but node-postgres needs rejectUnauthorized:false unless the CA is provided.
-const needsSsl = /sslmode=require/.test(config.databaseUrl) || /tsdb\.cloud\.timescale\.com/.test(config.databaseUrl);
+// Timescale Cloud requires SSL but presents a cert chain Node doesn't trust by default.
+// Newer pg-connection-string treats `sslmode=require` as verify-full, which rejects it, so we
+// strip sslmode from the URL and set SSL ourselves (encrypt, don't verify the managed cert).
+const needsSsl =
+  /sslmode=/.test(config.databaseUrl) || /tsdb\.cloud\.timescale\.com/.test(config.databaseUrl);
+const connectionString = config.databaseUrl.replace(/([?&])sslmode=[^&]*(&|$)/, "$1").replace(/[?&]$/, "");
 
 export const pool = new pg.Pool({
-  connectionString: config.databaseUrl,
+  connectionString,
   ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
   max: 10,
 });

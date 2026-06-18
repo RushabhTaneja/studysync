@@ -21,6 +21,9 @@ async function main() {
   if (!rows[0]) throw new Error(`No participant with code ${code} (run npm run seed first)`);
   const accountId = rows[0].account_id;
 
+  // Idempotent: clear any prior synthetic rows for this participant so re-runs don't stack.
+  await query(`DELETE FROM glucose_egv WHERE participant_account_id=$1 AND source='synthetic-dev'`, [accountId]);
+
   const now = Date.now();
   const start = now - days * 24 * 3600 * 1000;
   const stepMs = 5 * 60 * 1000; // one reading every 5 minutes when worn
@@ -37,15 +40,19 @@ async function main() {
     const worn = gapDay ? Math.random() < 0.4 : Math.random() < 0.92;
     if (!worn) continue;
 
-    // Diurnal glucose: dawn rise, post-meal bumps, lower overnight. ~120 mg/dL baseline.
+    // Diurnal glucose: dawn rise, post-meal excursions, lower overnight. ~135 mg/dL baseline
+    // with meal spikes that push some readings >180 and an occasional overnight dip <70,
+    // so time-in-range lands in a realistic ~70–85% band rather than a flat 97%.
     const diurnal =
-      120 +
-      25 * Math.sin(((hour - 8) / 24) * 2 * Math.PI) +
-      30 * Math.exp(-((hour - 8) ** 2) / 2) + // breakfast
-      35 * Math.exp(-((hour - 13) ** 2) / 2) + // lunch
-      40 * Math.exp(-((hour - 19) ** 2) / 3); // dinner
-    const noise = (Math.random() - 0.5) * 30;
-    const value = Math.max(45, Math.min(320, Math.round(diurnal + noise)));
+      135 +
+      18 * Math.sin(((hour - 8) / 24) * 2 * Math.PI) +
+      45 * Math.exp(-((hour - 8) ** 2) / 1.5) + // breakfast
+      50 * Math.exp(-((hour - 13) ** 2) / 1.5) + // lunch
+      60 * Math.exp(-((hour - 19) ** 2) / 2.5); // dinner
+    const dailyDrift = ((dayIndex % 5) - 2) * 12; // some days run higher/lower
+    const noise = (Math.random() - 0.5) * 44;
+    const hypoDip = Math.random() < 0.01 ? -55 : 0; // rare overnight low
+    const value = Math.max(40, Math.min(350, Math.round(diurnal + dailyDrift + noise + hypoDip)));
 
     const trend =
       noise > 8 ? "rising" : noise < -8 ? "falling" : "flat";
@@ -61,7 +68,7 @@ async function main() {
 
   // Materialize the continuous aggregate over the generated range.
   await query(
-    `CALL refresh_continuous_aggregate('cagg_glucose_hourly', $1, $2)`,
+    `CALL refresh_continuous_aggregate('cagg_glucose_hourly', $1::timestamptz, $2::timestamptz)`,
     [new Date(start).toISOString(), new Date(now).toISOString()]
   );
 
