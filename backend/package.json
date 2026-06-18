@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seed.ts",
-    "seed:demo-glucose": "tsx src/db/seedDemoGlucose.ts"
+    "seed:demo-glucose": "tsx src/db/seedDemoGlucose.ts",
+    "clear-mock": "tsx src/db/clearMockData.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

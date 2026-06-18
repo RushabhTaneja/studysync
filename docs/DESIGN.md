@@ -151,18 +151,22 @@ glucose profile** (per-hour percentile curve via `percentile_cont`).
 | Decision | Rationale |
 |---|---|
 | **Web participant app instead of Android** | Explicit MVP scope cut to land a genuine end-to-end slice by the deadline. Same flows (sign-in, consent, connect/disconnect, own data). The brief's *Android* constraint is the one fixed item we consciously deviate from; everything else (real OAuth, TimescaleDB, RBAC) is kept real. |
-| **SMART-on-FHIR is the proven-genuine integration** | Its public sandbox needs no app registration, so it runs immediately and end-to-end. Dexcom's full OAuth + EGV-ingest code is complete; with real sandbox credentials wired in, the handshake is validated up to Dexcom's own consent screen (client ID + redirect URI accepted), but Dexcom's sandbox e-signature/consent page hangs before redirecting back — an external, undocumented bug on their side, independent of our code. The integration activates the moment that page cooperates; meanwhile a clearly-labeled synthetic generator keeps the CGM analytics demoable. |
+| **Both integrations are genuine and verified end-to-end** | SMART-on-FHIR (public sandbox, no registration) and Dexcom CGM (registered sandbox app) both run the real OAuth handshake and pull live sandbox data: a real FHIR R4 clinical record and ~51k real EGV readings respectively. SMART needed a launch-context fix (encoding a provider-standalone context into the launcher's `/sim/` segment); Dexcom needed only a clean pass through its consent SPA. No mocked data in the running system. |
+| **Anchor analytics windows to the latest reading** | The Dexcom sandbox serves a *fixed historical* window (e.g. ending months before "today"), so a literal "last 30 days from now" would be empty. Metrics, adherence, and AGP windows anchor to each participant's most recent reading, so they always reflect the real series. The cohort view still reports the absolute last-data timestamp so staleness is visible. |
 | **TypeScript everywhere (Node + React)** | One language across the stack; fast to build; Express keeps the OAuth orchestration explicit and readable. |
 | **Managed TimescaleDB (Timescale Cloud)** | Avoids local Docker; the same instance doubles as the hosted DB for the live deployment. |
 | **Bearer-token auth (JWT in localStorage)** | Keeps OAuth callbacks simple cross-origin — the `oauth_state` row carries the participant binding, so callbacks don't depend on cookies/CORS. (A cookie/session swap is a known hardening step.) |
 | **Continuous aggregate for adherence** | Pushes aggregation into TimescaleDB as the brief asks, instead of recomputing wear-hours in app code. |
-| **Synthetic-glucose dev seeder, clearly labeled** | Lets the CGM analytics be demoed before Dexcom credentials exist. It is *not* a Dexcom connection and rows are tagged `source='synthetic-dev'`; the genuine path remains `integrations/dexcom.ts`. |
+| **Synthetic-glucose dev seeder (now unused, retained as a dev aid)** | Used only while Dexcom credentials were pending, to build the charts. Rows were tagged `source='synthetic-dev'` and have since been purged (`npm run clear-mock`); the running system contains only `source='dexcom'` data. The seeder remains in the repo as a local dev aid for anyone without sandbox credentials. |
 | **Insights chat scoped last / planned** | Deferred behind the two integrations and dashboard (the backbone). Design: classify a question as glucose vs. EHR, run parameterized SQL over the relevant tables, and have the LLM narrate the grounded result + pick a chart. Requires an Anthropic API key. |
 
 ## 6. Known gaps / next steps
 
 - Android client (the deliberate scope cut above).
-- Token **refresh on expiry** is implemented for both providers but not yet on a background
+- FHIR Blood-Pressure observations arrive as `component` values (systolic/diastolic) rather than a
+  top-level `valueQuantity`, so they flatten with an empty value; splitting components is a small
+  follow-up.
+- Token **refresh on expiry** helpers exist for both providers but are not yet on a background
   scheduler; current ingest happens at connect time. A periodic re-sync job is the next step.
 - Insights chat (designed, not yet wired).
 - Cookie/session auth + CSRF hardening; secrets-at-rest encryption for stored OAuth tokens.

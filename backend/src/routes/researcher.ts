@@ -23,7 +23,21 @@ async function resolveParticipant(code: string): Promise<{ accountId: string; na
   return rows[0] ? { accountId: rows[0].account_id, name: rows[0].display_name } : null;
 }
 
-const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 3600 * 1000);
+/**
+ * Resolve an N-day analytics window anchored to the participant's most recent reading.
+ * CGM sandboxes serve a fixed historical window, so anchoring to "now" would show nothing;
+ * we anchor to the latest available data so metrics always reflect the real series.
+ */
+async function windowFor(accountId: string, days: number): Promise<{ start: Date; end: Date }> {
+  const { rows } = await query<{ m: Date | null }>(
+    `SELECT max(ts) AS m FROM glucose_egv WHERE participant_account_id = $1`,
+    [accountId]
+  );
+  const latest = rows[0]?.m ? new Date(rows[0].m) : new Date();
+  const end = new Date(latest.getTime() + 1000); // make the window inclusive of the last reading
+  const start = new Date(end.getTime() - days * 24 * 3600 * 1000);
+  return { start, end };
+}
 
 /** Cohort overview: per participant, connected sources, data flow, last data point. */
 researcherRouter.get("/cohort", async (_req, res) => {
@@ -70,8 +84,7 @@ researcherRouter.get("/participant/:code", async (req, res) => {
   const p = await resolveParticipant(req.params.code);
   if (!p) return res.status(404).json({ error: "Participant not found" });
   const days = Number(req.query.days ?? 30);
-  const start = daysAgo(days);
-  const end = new Date();
+  const { start, end } = await windowFor(p.accountId, days);
 
   const [metrics, conditions, meds, observations, patient] = await Promise.all([
     glucoseMetrics(p.accountId, start, end),
@@ -100,7 +113,8 @@ researcherRouter.get("/participant/:code/adherence", async (req, res) => {
   const p = await resolveParticipant(req.params.code);
   if (!p) return res.status(404).json({ error: "Participant not found" });
   const days = Number(req.query.days ?? 30);
-  const series = await dailyAdherence(p.accountId, daysAgo(days), new Date());
+  const { start, end } = await windowFor(p.accountId, days);
+  const series = await dailyAdherence(p.accountId, start, end);
   res.json({ participantCode: req.params.code, expectedReadingsPerHour: EXPECTED_READINGS_PER_HOUR, days: series });
 });
 
@@ -109,19 +123,25 @@ researcherRouter.get("/participant/:code/agp", async (req, res) => {
   const p = await resolveParticipant(req.params.code);
   if (!p) return res.status(404).json({ error: "Participant not found" });
   const days = Number(req.query.days ?? 30);
-  const profile = await ambulatoryProfile(p.accountId, daysAgo(days), new Date());
+  const { start, end } = await windowFor(p.accountId, days);
+  const profile = await ambulatoryProfile(p.accountId, start, end);
   res.json({ participantCode: req.params.code, profile });
 });
 
 /** Non-adherence alerts: participants with low recent wear-time. */
 researcherRouter.get("/alerts", async (_req, res) => {
   const { rows } = await query<any>(
-    `WITH recent AS (
-       SELECT participant_account_id,
-              count(*) FILTER (WHERE reading_count >= 6) AS worn_hours
-         FROM cagg_glucose_hourly
-        WHERE bucket >= now() - interval '7 days'
-        GROUP BY participant_account_id
+    `WITH latest AS (
+       SELECT participant_account_id, max(bucket) AS maxb
+         FROM cagg_glucose_hourly GROUP BY participant_account_id
+     ),
+     recent AS (
+       SELECT c.participant_account_id,
+              count(*) FILTER (WHERE c.reading_count >= 6) AS worn_hours
+         FROM cagg_glucose_hourly c
+         JOIN latest l ON l.participant_account_id = c.participant_account_id
+        WHERE c.bucket > l.maxb - interval '7 days'
+        GROUP BY c.participant_account_id
      )
      SELECT p.participant_code, a.display_name,
             COALESCE(r.worn_hours, 0) AS worn_hours_7d

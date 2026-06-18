@@ -54,6 +54,25 @@ npm run dev                 # http://localhost:5173
 
 See `backend/src/db/seed.ts` (printed on seed). One researcher, one participant.
 
+## Data sources — both genuine
+
+Both integrations run the real OAuth 2.0 handshake against their sandbox and pull live data
+(synthetic patients, real authorization — no mocked data in the running system):
+
+- **Dexcom CGM** — OAuth2 authorization-code; pulls the EGV glucose time-series into the hypertable.
+  Requires a registered sandbox app (`DEXCOM_CLIENT_ID/SECRET`) and its redirect URI set to
+  `${BACKEND_BASE_URL}/api/connect/dexcom/callback`.
+- **EHR via SMART-on-FHIR** — OAuth2 authorization-code + PKCE against the public SMART Health IT
+  launcher (no registration); pulls Patient / Condition / MedicationRequest / Observation.
+
+> The Dexcom sandbox serves a *fixed historical* data window, so the dashboard anchors its
+> metrics/adherence/AGP windows to each participant's latest reading rather than to "today."
+
+`npm run seed:demo-glucose` can populate clearly-labeled synthetic CGM rows for local development
+without Dexcom credentials; `npm run clear-mock` removes them so only genuine data remains.
+
 ## Status
 
-Work in progress — see the task list / commit history.
+Both data-source integrations verified end-to-end against live sandboxes; researcher dashboard,
+adherence (continuous aggregate), and JSON export working on real data. Remaining: NL insights
+chat and live hosting — see the commit history.
