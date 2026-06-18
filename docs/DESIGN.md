@@ -158,7 +158,7 @@ glucose profile** (per-hour percentile curve via `percentile_cont`).
 | **Bearer-token auth (JWT in localStorage)** | Keeps OAuth callbacks simple cross-origin — the `oauth_state` row carries the participant binding, so callbacks don't depend on cookies/CORS. (A cookie/session swap is a known hardening step.) |
 | **Continuous aggregate for adherence** | Pushes aggregation into TimescaleDB as the brief asks, instead of recomputing wear-hours in app code. |
 | **Synthetic-glucose dev seeder (now unused, retained as a dev aid)** | Used only while Dexcom credentials were pending, to build the charts. Rows were tagged `source='synthetic-dev'` and have since been purged (`npm run clear-mock`); the running system contains only `source='dexcom'` data. The seeder remains in the repo as a local dev aid for anyone without sandbox credentials. |
-| **Insights chat scoped last / planned** | Deferred behind the two integrations and dashboard (the backbone). Design: classify a question as glucose vs. EHR, run parameterized SQL over the relevant tables, and have the LLM narrate the grounded result + pick a chart. Requires an Anthropic API key. |
+| **Insights chat = Claude tool-use agent over read-only SQL** | Built last, behind the backbone. Rather than free-form SQL generation, the assistant (`claude-opus-4-8`, adaptive thinking) is given a fixed set of **read-only, parameterized data tools** (cohort, glucose metrics/ranking, AGP, adherence, find-condition, find-medication, labs, demographics) plus an `emit_chart` tool. A manual agentic loop runs the tools and feeds results back until Claude has a grounded answer; the frontend renders any emitted chart specs. This keeps answers grounded in real data (no hallucinated numbers), needs no schema knowledge from the researcher, and confines the model to safe queries. One conversational surface spans both sources because every tool keys on the participant. |
 
 ## 6. Known gaps / next steps
 
@@ -168,6 +168,5 @@ glucose profile** (per-hour percentile curve via `percentile_cont`).
   follow-up.
 - Token **refresh on expiry** helpers exist for both providers but are not yet on a background
   scheduler; current ingest happens at connect time. A periodic re-sync job is the next step.
-- Insights chat (designed, not yet wired).
 - Cookie/session auth + CSRF hardening; secrets-at-rest encryption for stored OAuth tokens.
 - Per-study authorization scoping (currently all researchers see the single cohort).

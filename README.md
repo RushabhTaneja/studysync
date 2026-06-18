@@ -74,5 +74,8 @@ without Dexcom credentials; `npm run clear-mock` removes them so only genuine da
 ## Status
 
 Both data-source integrations verified end-to-end against live sandboxes; researcher dashboard,
-adherence (continuous aggregate), and JSON export working on real data. Remaining: NL insights
-chat and live hosting — see the commit history.
+adherence (continuous aggregate), JSON export, and the **NL insights chat** (Claude tool-use agent
+over both glucose and EHR, with charts) working on real data. Remaining: live hosting — see commit history.
+
+The insights chat requires `ANTHROPIC_API_KEY` in `backend/.env` (model via `ANTHROPIC_MODEL`,
+default `claude-opus-4-8`); without it the chat endpoint returns 503 and the rest of the app is unaffected.
