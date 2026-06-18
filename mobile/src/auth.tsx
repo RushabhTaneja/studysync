@@ -22,7 +22,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      setUser(await api.me());
+      const me = await api.me();
+      // This app is participant-only. Never let a non-participant session through.
+      if (me.role !== "participant") {
+        await tokenStore.clear();
+        setUser(null);
+        return;
+      }
+      setUser(me);
     } catch {
       await tokenStore.clear();
       setUser(null);
@@ -33,8 +40,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refresh().finally(() => setLoading(false));
   }, []);
 
+  // Reject non-participants up front: clear any token and don't set the user, so the app
+  // never navigates past the login screen for a researcher account.
+  const PARTICIPANT_ONLY = "This app is for participants. Researchers should use the web dashboard.";
+
   const login = async (email: string, password: string) => {
     const { token, user } = await api.login(email, password);
+    if (user.role !== "participant") {
+      await tokenStore.clear();
+      throw new Error(PARTICIPANT_ONLY);
+    }
     await tokenStore.set(token);
     setUser(user);
     return user;
@@ -42,6 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (data: { email: string; password: string; displayName: string }) => {
     const { token, user } = await api.register(data);
+    if (user.role !== "participant") {
+      await tokenStore.clear();
+      throw new Error(PARTICIPANT_ONLY);
+    }
     await tokenStore.set(token);
     setUser(user);
     return user;

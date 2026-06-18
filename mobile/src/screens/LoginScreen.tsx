@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator } from "react-native";
 import { useAuth } from "../auth";
-import { tokenStore } from "../api";
 import { s, colors } from "../theme";
 
 export function LoginScreen() {
@@ -17,13 +16,10 @@ export function LoginScreen() {
     setError(null);
     setBusy(true);
     try {
-      const user =
-        mode === "login" ? await login(email.trim(), password) : await register({ email: email.trim(), password, displayName });
-      // This app is for participants only; researchers use the web dashboard.
-      if (user.role !== "participant") {
-        await tokenStore.clear();
-        setError("This app is for participants. Researchers should use the web dashboard.");
-      }
+      // The auth layer rejects non-participant accounts (researchers use the web dashboard)
+      // and throws before any session is established, so the message surfaces below.
+      if (mode === "login") await login(email.trim(), password);
+      else await register({ email: email.trim(), password, displayName });
     } catch (e: any) {
       setError(e.message);
     } finally {
