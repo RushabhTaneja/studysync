@@ -1,6 +1,9 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { config } from "./config.js";
 import { authOptional } from "./auth/middleware.js";
 import { authRouter } from "./auth/routes.js";
@@ -35,6 +38,16 @@ app.use("/api/connect", connectRouter);
 app.use("/api/participant", participantRouter);
 app.use("/api/researcher", researcherRouter);
 app.use("/api/researcher/chat", chatRouter);
+
+// In production, serve the built React app from the same origin (one Railway service).
+// frontend/dist sits two levels up from this compiled file (backend/dist/index.js).
+const frontendDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../frontend/dist");
+if (existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  // SPA fallback: any non-API GET serves index.html (client-side routing).
+  app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(path.join(frontendDist, "index.html")));
+  console.log(`[studysync] serving frontend from ${frontendDist}`);
+}
 
 // Centralized error handler.
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

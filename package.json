@@ -1,0 +1,12 @@
+{
+  "name": "studysync",
+  "private": true,
+  "description": "StudySync — Wearable Data Platform (monorepo). Single-service deploy: backend serves the built frontend.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm --prefix frontend install && npm --prefix frontend run build && npm --prefix backend install && npm --prefix backend run build",
+    "start": "npm --prefix backend run start"
+  }
+}
