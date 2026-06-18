@@ -7,6 +7,7 @@ import { authRouter } from "./auth/routes.js";
 import { connectRouter } from "./routes/connect.js";
 import { participantRouter } from "./routes/participant.js";
 import { researcherRouter } from "./routes/researcher.js";
+import { chatRouter } from "./routes/chat.js";
 
 const app = express();
 
@@ -24,6 +25,7 @@ app.get("/api/health", (_req, res) =>
   res.json({
     ok: true,
     dexcomConfigured: config.dexcom.configured,
+    chatConfigured: config.chatConfigured,
     smartIss: config.smart.iss,
   })
 );
@@ -32,6 +34,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/connect", connectRouter);
 app.use("/api/participant", participantRouter);
 app.use("/api/researcher", researcherRouter);
+app.use("/api/researcher/chat", chatRouter);
 
 // Centralized error handler.
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

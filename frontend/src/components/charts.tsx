@@ -115,6 +115,55 @@ export function RankedBar({ items, unit }: { items: Array<{ label: string; value
   );
 }
 
+const PALETTE = ["#1565c0", "#2e7d32", "#ef9a00", "#8c1515", "#6a1b9a", "#00838f"];
+// Domain colors for time-in-range series, matched by name.
+const TIR_COLORS: Record<string, string> = {
+  "below 70": RED,
+  "in range (70-180)": GREEN,
+  "in range 70-180": GREEN,
+  "above 180": AMBER,
+};
+
+/** Generic renderer for the insights-chat `emit_chart` spec. */
+export function InsightsChart({ spec }: { spec: any }) {
+  const { type, title, labels, series, unit } = spec;
+  const stacked = type === "stacked_bar";
+  const horizontal = type === "horizontal_bar";
+  const isLine = type === "line";
+
+  const datasets = (series ?? []).map((s: any, i: number) => {
+    const named = TIR_COLORS[String(s.name).toLowerCase()];
+    const color = named ?? PALETTE[i % PALETTE.length];
+    return {
+      label: s.name,
+      data: s.data,
+      backgroundColor: color,
+      borderColor: color,
+      borderWidth: isLine ? 2 : 0,
+      pointRadius: isLine ? 0 : undefined,
+      fill: false,
+    };
+  });
+
+  const data = { labels, datasets };
+  const valueAxis = { ticks: { callback: (v: any) => `${v}${unit ?? ""}` }, ...(stacked ? { stacked: true } : {}) };
+  const catAxis = stacked ? { stacked: true } : {};
+  const options: any = {
+    responsive: true,
+    indexAxis: horizontal ? "y" : "x",
+    plugins: { legend: { display: datasets.length > 1, position: "bottom" } },
+    scales: horizontal ? { x: valueAxis, y: catAxis } : { y: valueAxis, x: catAxis },
+  };
+
+  const Comp = isLine ? Line : Bar;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{title}</div>
+      <Comp data={data} options={options} height={horizontal ? Math.max(90, labels.length * 30) : 140} />
+    </div>
+  );
+}
+
 /** Calendar-style adherence heatmap: one cell per day, shaded by wear-hours (0–24). */
 export function AdherenceHeatmap({ days }: { days: Array<{ day: string; wearHours: number }> }) {
   const color = (h: number) => {

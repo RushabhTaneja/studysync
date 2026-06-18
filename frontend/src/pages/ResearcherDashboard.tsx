@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { Chat } from "../components/Chat";
 
 function relative(ts: string | null): string {
   if (!ts) return "—";
@@ -32,6 +33,9 @@ export function ResearcherDashboard() {
     <>
       <h1>Cohort overview</h1>
       {error && <div className="error">{error}</div>}
+
+      <Chat />
+
 
       {alerts.length > 0 && (
         <div className="card" style={{ borderColor: "var(--amber)" }}>

@@ -13,6 +13,7 @@
     "clear-mock": "tsx src/db/clearMockData.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.2",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",

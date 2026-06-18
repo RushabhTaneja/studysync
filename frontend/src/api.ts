@@ -74,4 +74,9 @@ export const api = {
   agp: (code: string, days = 30) =>
     request<any>(`/researcher/participant/${code}/agp?days=${days}`),
   exportUrl: (code: string) => `/api/researcher/participant/${code}/export`,
+  chat: (messages: { role: "user" | "assistant"; content: string }[]) =>
+    request<{ answer: string; charts: any[] }>("/researcher/chat", {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    }),
 };

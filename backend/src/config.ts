@@ -54,6 +54,10 @@ export const config = {
   },
 
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  anthropicModel: process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8",
+  get chatConfigured() {
+    return Boolean(this.anthropicApiKey);
+  },
 };
 
 export const redirectUri = (provider: "dexcom" | "ehr") =>
