@@ -58,6 +58,9 @@ CREATE TABLE IF NOT EXISTS oauth_state (
   created_at             timestamptz NOT NULL DEFAULT now()
 );
 -- @@break
+-- Optional deep link the callback redirects to instead of the web app (mobile clients).
+ALTER TABLE oauth_state ADD COLUMN IF NOT EXISTS return_to text;
+-- @@break
 
 -- ─────────────────────────── CGM time-series ───────────────────────────
 -- High-frequency glucose readings (Dexcom EGVs). Hypertable, partitioned on ts.

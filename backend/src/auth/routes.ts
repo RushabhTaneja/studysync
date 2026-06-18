@@ -14,6 +14,26 @@ const registerSchema = z.object({
   role: z.enum(["participant", "researcher"]),
 });
 
+/** Build the user payload, hydrating participant profile/consent state from the DB. */
+async function userPayload(account: {
+  id: string;
+  email: string;
+  role: "participant" | "researcher";
+  displayName: string;
+}) {
+  const base = { id: account.id, email: account.email, role: account.role, displayName: account.displayName };
+  if (account.role !== "participant") return base;
+  const { rows } = await query<{ participant_code: string; consent_accepted_at: Date | null }>(
+    `SELECT participant_code, consent_accepted_at FROM participants WHERE account_id = $1`,
+    [account.id]
+  );
+  return {
+    ...base,
+    participantCode: rows[0]?.participant_code,
+    consentAcceptedAt: rows[0]?.consent_accepted_at ?? null,
+  };
+}
+
 /** Allocate the next participant code: P01, P02, ... */
 async function nextParticipantCode(): Promise<string> {
   const { rows } = await query<{ max: number }>(
@@ -49,7 +69,8 @@ authRouter.post("/register", async (req, res) => {
   }
 
   const token = signToken({ sub: accountId, role, email, name: displayName });
-  res.status(201).json({ token, user: { id: accountId, email, role, displayName } });
+  const user = await userPayload({ id: accountId, email, role, displayName });
+  res.status(201).json({ token, user });
 });
 
 const loginSchema = z.object({ email: z.string().email(), password: z.string() });
@@ -72,25 +93,15 @@ authRouter.post("/login", async (req, res) => {
   }
 
   const token = signToken({ sub: acct.id, role: acct.role, email, name: acct.display_name });
-  res.json({ token, user: { id: acct.id, email, role: acct.role, displayName: acct.display_name } });
+  const user = await userPayload({ id: acct.id, email, role: acct.role, displayName: acct.display_name });
+  res.json({ token, user });
 });
 
 /** Current user + (for participants) their profile/consent state. */
 authRouter.get("/me", requireAuth(), async (req, res) => {
   const u = req.user!;
-  const base = { id: u.sub, email: u.email, role: u.role, displayName: u.name };
-  if (u.role === "participant") {
-    const { rows } = await query<{ participant_code: string; consent_accepted_at: Date | null }>(
-      `SELECT participant_code, consent_accepted_at FROM participants WHERE account_id = $1`,
-      [u.sub]
-    );
-    return res.json({
-      ...base,
-      participantCode: rows[0]?.participant_code,
-      consentAcceptedAt: rows[0]?.consent_accepted_at ?? null,
-    });
-  }
-  res.json(base);
+  const user = await userPayload({ id: u.sub, email: u.email, role: u.role, displayName: u.name });
+  res.json(user);
 });
 
 /** Participant accepts the consent notice. */

@@ -2,39 +2,51 @@
 
 A scaled-down wearable data platform: participants connect two real health-data sources over
 OAuth 2.0 (Dexcom CGM + EHR via SMART-on-FHIR); researchers monitor the cohort, view device-wear
-adherence, export data, and (planned) ask natural-language questions over both sources.
+adherence, export data, and ask natural-language questions over both sources.
+
+Two clients share one API: a **React Native (Expo) Android app** for participants (sign-in,
+consent, connect/disconnect sources, view own data) and a **React web app** for researchers (the
+dashboard) that also retains the original participant flows. The Android app is participant-only —
+it rejects researcher logins and points them to the web dashboard.
 
 ## 1. Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Client["Web app (React + Vite + TS)"]
-    P["Participant views\n(consent, connect sources, own data)"]
-    R["Researcher dashboard\n(cohort, adherence, metrics, export, chat)"]
+  subgraph Clients["Clients"]
+    M["React Native (Expo) Android app\nParticipant only\n(consent, connect sources, own data)"]
+    W["React + Vite web app\nResearcher dashboard + participant flows\n(cohort, adherence, metrics, export, chat)"]
   end
 
   subgraph API["Backend (Node + Express + TS)"]
     AUTH["Auth + RBAC\n(JWT, bcrypt)"]
-    OAUTH["OAuth orchestration\n(state + PKCE)"]
+    OAUTH["OAuth orchestration\n(state + PKCE, returnTo deep link)"]
     INGEST["Ingestion\n(EGV + FHIR flatten)"]
     METRICS["CGM metrics + adherence\n(SQL over TimescaleDB)"]
+    CHAT["Insights chat\n(Claude tool-use agent)"]
   end
 
-  DB[("TimescaleDB\n- accounts / participants\n- oauth_connections\n- glucose_egv (hypertable)\n- fhir_* (flattened)\n- cagg_glucose_hourly")]
+  DB[("TimescaleDB\n- accounts / participants\n- oauth_connections / oauth_state\n- glucose_egv (hypertable)\n- fhir_* (flattened)\n- cagg_glucose_hourly")]
 
   DEX["Dexcom CGM sandbox\n(OAuth2 auth-code, EGVs)"]
   FHIR["SMART-on-FHIR sandbox\n(OAuth2 + PKCE, FHIR R4)"]
 
-  P -->|bearer JWT| API
-  R -->|bearer JWT| API
+  M -->|bearer JWT| API
+  W -->|bearer JWT| API
   AUTH --- DB
   INGEST --- DB
   METRICS --- DB
+  CHAT --- DB
   OAUTH -->|authorize / token| DEX
   OAUTH -->|discovery / authorize / token| FHIR
   INGEST -->|pull EGVs| DEX
   INGEST -->|pull Patient/Condition/Med/Obs| FHIR
 ```
+
+Both clients hit the same API with a bearer JWT and differ only in role: the Android app blocks
+non-participants, the web app serves researchers (and the original participant views). The OAuth
+callback redirects to a `returnTo` deep link (`studysync://oauth` / Expo dev URL) for the mobile
+client, or to the web participant page for the browser — the same handshake serves both.
 
 **Flow of a data-source connection (genuine OAuth, no passwords in our app):**
 
@@ -55,6 +67,7 @@ session cookie. Dexcom is the same shape minus PKCE (confidential client with a 
 erDiagram
   accounts ||--o| participants : "is (role=participant)"
   participants ||--o{ oauth_connections : connects
+  participants ||--o{ oauth_state : "pending handshake"
   participants ||--o{ glucose_egv : produces
   participants ||--|| fhir_patient : has
   participants ||--o{ fhir_condition : has
@@ -81,6 +94,13 @@ erDiagram
     text access_token
     text refresh_token
     timestamptz last_data_at
+  }
+  oauth_state {
+    text state PK "CSRF token"
+    uuid participant_account_id FK
+    text provider "dexcom|ehr"
+    text code_verifier "PKCE (ehr)"
+    text return_to "client deep link"
   }
   glucose_egv {
     uuid participant_account_id FK
@@ -150,7 +170,10 @@ glucose profile** (per-hour percentile curve via `percentile_cont`).
 
 | Decision | Rationale |
 |---|---|
-| **Web participant app instead of Android** | Explicit MVP scope cut to land a genuine end-to-end slice by the deadline. Same flows (sign-in, consent, connect/disconnect, own data). The brief's *Android* constraint is the one fixed item we consciously deviate from; everything else (real OAuth, TimescaleDB, RBAC) is kept real. |
+| **Ship the web slice first, then the React Native Android app** | The MVP landed as a web app to prove a genuine end-to-end slice (real OAuth, TimescaleDB, RBAC) fast; the **React Native (Expo) Android participant app** was then built on top of the same API. Web-first de-risked the integrations before adding a second client. |
+| **Mobile = participants, web = researchers** | The Android app is participant-only and rejects researcher logins in the auth layer (no session is ever created for a researcher). Researchers stay on the web dashboard, which needs the larger screen for cohort tables, charts, and the chat. The clients share one API and auth model, differing only by role. |
+| **OAuth `returnTo` deep link with a poll fallback** | The OAuth callback redirects to a client-supplied `returnTo` (stored on the `oauth_state` row) — a `studysync://`/Expo deep link for mobile, the web participant page for the browser — so the in-app browser closes itself and hands back to the app. If an older backend ignores it, the app falls back to polling connection status, so the flow degrades gracefully. |
+| **Consent state returned on login, not just `/me`** | A shared `userPayload()` helper hydrates `participantCode` + `consentAcceptedAt` for `/login`, `/register`, and `/me`, so a returning participant skips the one-time consent screen instead of being re-prompted every sign-in. |
 | **Both integrations are genuine and verified end-to-end** | SMART-on-FHIR (public sandbox, no registration) and Dexcom CGM (registered sandbox app) both run the real OAuth handshake and pull live sandbox data: a real FHIR R4 clinical record and ~51k real EGV readings respectively. SMART needed a launch-context fix (encoding a provider-standalone context into the launcher's `/sim/` segment); Dexcom needed only a clean pass through its consent SPA. No mocked data in the running system. |
 | **Anchor analytics windows to the latest reading** | The Dexcom sandbox serves a *fixed historical* window (e.g. ending months before "today"), so a literal "last 30 days from now" would be empty. Metrics, adherence, and AGP windows anchor to each participant's most recent reading, so they always reflect the real series. The cohort view still reports the absolute last-data timestamp so staleness is visible. |
 | **TypeScript everywhere (Node + React)** | One language across the stack; fast to build; Express keeps the OAuth orchestration explicit and readable. |
@@ -162,7 +185,9 @@ glucose profile** (per-hour percentile curve via `percentile_cont`).
 
 ## 6. Known gaps / next steps
 
-- Android client (the deliberate scope cut above).
+- Android app runs via Expo Go / a dev build; a signed release build (`eas build -p android`) and
+  app-store packaging are not done. The custom `studysync://` scheme activates in a standalone
+  build (in Expo Go the deep link uses the `exp://` dev URL).
 - FHIR Blood-Pressure observations arrive as `component` values (systolic/diastolic) rather than a
   top-level `valueQuantity`, so they flatten with an empty value; splitting components is a small
   follow-up.

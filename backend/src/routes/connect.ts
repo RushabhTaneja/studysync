@@ -9,9 +9,21 @@ import { ingestEhr } from "../integrations/fhirIngest.js";
 
 export const connectRouter = Router();
 
+// Redirect the client after an OAuth callback. Web clients land on the participant page;
+// mobile clients pass a `returnTo` deep link (e.g. studysync://oauth) so the app's in-app
+// browser closes and hands control back to the app.
+const redirectToClient = (
+  returnTo: string | null | undefined,
+  status: string,
+  provider: string,
+  reason?: string
+) => {
+  const base = returnTo || `${config.frontendBaseUrl}/participant`;
+  const sep = base.includes("?") ? "&" : "?";
+  return `${base}${sep}${status}=${provider}` + (reason ? `&reason=${encodeURIComponent(reason)}` : "");
+};
 const redirectToFrontend = (status: string, provider: string, reason?: string) =>
-  `${config.frontendBaseUrl}/participant?${status}=${provider}` +
-  (reason ? `&reason=${encodeURIComponent(reason)}` : "");
+  redirectToClient(null, status, provider, reason);
 
 async function upsertConnection(row: {
   participantAccountId: string;
@@ -56,9 +68,9 @@ connectRouter.post("/ehr/start", requireAuth("participant"), async (req, res) =>
     const state = randomToken();
     const { verifier, challenge } = pkcePair();
     await query(
-      `INSERT INTO oauth_state (state, participant_account_id, provider, code_verifier, token_url, fhir_base_url)
-       VALUES ($1,$2,'ehr',$3,$4,$5)`,
-      [state, req.user!.sub, verifier, disco.token_endpoint, config.smart.iss]
+      `INSERT INTO oauth_state (state, participant_account_id, provider, code_verifier, token_url, fhir_base_url, return_to)
+       VALUES ($1,$2,'ehr',$3,$4,$5,$6)`,
+      [state, req.user!.sub, verifier, disco.token_endpoint, config.smart.iss, req.body?.returnTo ?? null]
     );
     const authorizeUrl = smart.buildAuthorizeUrl({
       authorizationEndpoint: disco.authorization_endpoint,
@@ -80,6 +92,7 @@ connectRouter.get("/ehr/callback", async (req, res) => {
       code_verifier: string;
       token_url: string;
       fhir_base_url: string;
+      return_to: string | null;
     }>(`DELETE FROM oauth_state WHERE state = $1 AND provider = 'ehr' RETURNING *`, [state]);
     const st = rows[0];
     if (!st) throw new Error("Invalid or expired OAuth state");
@@ -108,7 +121,7 @@ connectRouter.get("/ehr/callback", async (req, res) => {
       fhirBaseUrl: st.fhir_base_url,
       lastDataAt: ingest.lastDataAt,
     });
-    res.redirect(redirectToFrontend("connected", "ehr"));
+    res.redirect(redirectToClient(st.return_to, "connected", "ehr"));
   } catch (err: any) {
     console.error("[ehr/callback]", err.message);
     res.redirect(redirectToFrontend("error", "ehr", err.message));
@@ -124,8 +137,8 @@ connectRouter.post("/dexcom/start", requireAuth("participant"), async (req, res)
   }
   const state = randomToken();
   await query(
-    `INSERT INTO oauth_state (state, participant_account_id, provider) VALUES ($1,$2,'dexcom')`,
-    [state, req.user!.sub]
+    `INSERT INTO oauth_state (state, participant_account_id, provider, return_to) VALUES ($1,$2,'dexcom',$3)`,
+    [state, req.user!.sub, req.body?.returnTo ?? null]
   );
   res.json({ authorizeUrl: dexcom.buildAuthorizeUrl(state) });
 });
@@ -134,8 +147,8 @@ connectRouter.get("/dexcom/callback", async (req, res) => {
   const { code, state, error } = req.query as Record<string, string>;
   if (error) return res.redirect(redirectToFrontend("error", "dexcom"));
   try {
-    const { rows } = await query<{ participant_account_id: string }>(
-      `DELETE FROM oauth_state WHERE state = $1 AND provider = 'dexcom' RETURNING participant_account_id`,
+    const { rows } = await query<{ participant_account_id: string; return_to: string | null }>(
+      `DELETE FROM oauth_state WHERE state = $1 AND provider = 'dexcom' RETURNING participant_account_id, return_to`,
       [state]
     );
     const st = rows[0];
@@ -152,7 +165,7 @@ connectRouter.get("/dexcom/callback", async (req, res) => {
       expiresIn: token.expires_in,
       scope: "offline_access",
     });
-    res.redirect(redirectToFrontend("connected", "dexcom"));
+    res.redirect(redirectToClient(st.return_to, "connected", "dexcom"));
 
     dexcom
       .ingestGlucose({ participantAccountId: st.participant_account_id, accessToken: token.access_token })

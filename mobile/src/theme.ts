@@ -1,0 +1,67 @@
+import { StyleSheet } from "react-native";
+
+export const colors = {
+  bg: "#f6f7f9",
+  card: "#ffffff",
+  ink: "#1c2530",
+  muted: "#6b7785",
+  line: "#e3e7ec",
+  brand: "#8c1515", // Stanford cardinal
+  green: "#2e7d32",
+  amber: "#ef9a00",
+  red: "#c62828",
+  blue: "#1565c0",
+};
+
+export const s = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: colors.bg },
+  container: { padding: 20, gap: 16 },
+  topbar: {
+    backgroundColor: colors.brand,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  topbarTitle: { color: "#fff", fontWeight: "700", fontSize: 16, letterSpacing: 0.3 },
+  card: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 12,
+    padding: 16,
+    gap: 8,
+  },
+  h1: { fontSize: 22, fontWeight: "700", color: colors.ink },
+  h2: { fontSize: 17, fontWeight: "700", color: colors.ink },
+  muted: { color: colors.muted, fontSize: 14 },
+  label: { color: colors.muted, fontSize: 13, marginBottom: 4 },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.line,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    backgroundColor: "#fff",
+  },
+  btn: {
+    backgroundColor: colors.brand,
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  btnText: { color: "#fff", fontWeight: "600", fontSize: 15 },
+  btnSecondary: { backgroundColor: "#eef0f3", borderWidth: 1, borderColor: colors.line },
+  btnSecondaryText: { color: colors.ink },
+  badge: { alignSelf: "flex-start", borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  badgeOn: { backgroundColor: "#e6f4ea" },
+  badgeOff: { backgroundColor: "#f0f2f5" },
+  badgeTextOn: { color: colors.green, fontWeight: "600", fontSize: 12 },
+  badgeTextOff: { color: colors.muted, fontWeight: "600", fontSize: 12 },
+  error: { backgroundColor: "#fdeaea", color: colors.red, padding: 10, borderRadius: 8, fontSize: 14 },
+  success: { backgroundColor: "#e6f4ea", color: colors.green, padding: 10, borderRadius: 8, fontSize: 14 },
+  statValue: { fontSize: 24, fontWeight: "700", color: colors.ink },
+  statLabel: { fontSize: 12, color: colors.muted },
+});
