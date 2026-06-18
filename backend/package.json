@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "migrate": "tsx src/db/migrate.ts",
-    "seed": "tsx src/db/seed.ts"
+    "seed": "tsx src/db/seed.ts",
+    "seed:demo-glucose": "tsx src/db/seedDemoGlucose.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
