@@ -120,7 +120,8 @@ export function Participant() {
       )}
       {errorFlag && (
         <div className="error">
-          Could not connect {errorFlag.toUpperCase()}. Please try again.{" "}
+          Could not connect {errorFlag.toUpperCase()}. Please try again.
+          {params.get("reason") && <div style={{ marginTop: 6, fontSize: 13 }}>Reason: {params.get("reason")}</div>}{" "}
           <a onClick={() => setParams({})} style={{ cursor: "pointer" }}>dismiss</a>
         </div>
       )}

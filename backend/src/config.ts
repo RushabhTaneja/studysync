@@ -7,6 +7,27 @@ function req(name: string, fallback?: string): string {
   return v;
 }
 
+// The SMART Launcher (smart-launcher-v2) encodes launch context as a base64url JSON array in a
+// `/sim/{...}/` path segment. A bare `/v/r4/fhir` base has no launch context, so its standalone
+// authorize endpoint fails with "Invalid launch options". We inject a provider-standalone context
+// (launch_type index 2) so the launcher shows a patient picker and returns patient context.
+// Field order per the launcher's codec: [launch_type, patient, provider, encounter, skip_login,
+// skip_auth, sim_ehr, scope, redirect_uris, client_id, client_secret, auth_error, jwks_url, jwks,
+// client_type, pkce, fhir_server].
+function smartLaunchSim(launchType = 2): string {
+  const arr = [launchType, "", "", "AUTO", 0, 0, 0, "", "", "", "", "", "", "", 0, 0, ""];
+  return Buffer.from(JSON.stringify(arr), "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+function resolveSmartIss(base: string): string {
+  if (base.includes("/sim/")) return base; // caller already provided launch context
+  return base.replace(/\/fhir\/?$/, `/sim/${smartLaunchSim()}/fhir`);
+}
+
 export const config = {
   port: parseInt(process.env.PORT ?? "4000", 10),
   nodeEnv: process.env.NODE_ENV ?? "development",
@@ -27,7 +48,8 @@ export const config = {
   },
 
   smart: {
-    iss: process.env.SMART_FHIR_ISS ?? "https://launch.smarthealthit.org/v/r4/fhir",
+    // Launch-enabled FHIR base (carries provider-standalone launch context for the sandbox).
+    iss: resolveSmartIss(process.env.SMART_FHIR_ISS ?? "https://launch.smarthealthit.org/v/r4/fhir"),
     clientId: process.env.SMART_CLIENT_ID ?? "studysync-web",
   },
 

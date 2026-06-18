@@ -9,8 +9,9 @@ import { ingestEhr } from "../integrations/fhirIngest.js";
 
 export const connectRouter = Router();
 
-const redirectToFrontend = (status: string, provider: string) =>
-  `${config.frontendBaseUrl}/participant?${status}=${provider}`;
+const redirectToFrontend = (status: string, provider: string, reason?: string) =>
+  `${config.frontendBaseUrl}/participant?${status}=${provider}` +
+  (reason ? `&reason=${encodeURIComponent(reason)}` : "");
 
 async function upsertConnection(row: {
   participantAccountId: string;
@@ -72,7 +73,7 @@ connectRouter.post("/ehr/start", requireAuth("participant"), async (req, res) =>
 
 connectRouter.get("/ehr/callback", async (req, res) => {
   const { code, state, error, error_description } = req.query as Record<string, string>;
-  if (error) return res.redirect(redirectToFrontend("error", "ehr"));
+  if (error) return res.redirect(redirectToFrontend("error", "ehr", error_description || error));
   try {
     const { rows } = await query<{
       participant_account_id: string;
@@ -110,7 +111,7 @@ connectRouter.get("/ehr/callback", async (req, res) => {
     res.redirect(redirectToFrontend("connected", "ehr"));
   } catch (err: any) {
     console.error("[ehr/callback]", err.message);
-    res.redirect(redirectToFrontend("error", "ehr"));
+    res.redirect(redirectToFrontend("error", "ehr", err.message));
   }
 });
 
