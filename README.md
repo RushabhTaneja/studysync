@@ -1,5 +1,11 @@
 # StudySync — Wearable Data Platform (MVP)
 
+> **🌐 Live system:** https://studysync-production-1228.up.railway.app
+>
+> **Seeded logins**
+> - Researcher — `researcher@studysync.dev` / `researcher123` (dashboard, adherence, export, insights chat)
+> - Participant — `participant@studysync.dev` / `participant123` (code **P01**, already linked to both sandboxes with genuine data)
+
 A scaled-down wearable data platform for the Snyder Lab take-home challenge. Participants
 connect two real health-data sources over OAuth 2.0 — **Dexcom CGM** (glucose time-series) and
 their **EHR via SMART-on-FHIR** (clinical record) — and researchers monitor the cohort, view
@@ -73,9 +79,11 @@ without Dexcom credentials; `npm run clear-mock` removes them so only genuine da
 
 ## Status
 
-Both data-source integrations verified end-to-end against live sandboxes; researcher dashboard,
-adherence (continuous aggregate), JSON export, and the **NL insights chat** (Claude tool-use agent
-over both glucose and EHR, with charts) working on real data. Remaining: live hosting — see commit history.
+**Deployed live on Railway** (single service: the backend serves the React build, against
+Timescale Cloud). Both data-source integrations verified end-to-end against live sandboxes;
+researcher dashboard, adherence (continuous aggregate), JSON export, and the **NL insights chat**
+(Claude tool-use agent over both glucose and EHR, with charts) working on real data. See
+`docs/DEPLOY.md` for the deployment walkthrough.
 
 The insights chat requires `ANTHROPIC_API_KEY` in `backend/.env` (model via `ANTHROPIC_MODEL`,
 default `claude-opus-4-8`); without it the chat endpoint returns 503 and the rest of the app is unaffected.
